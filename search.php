@@ -9,29 +9,28 @@ $search = trim($search);
 $searchParam = "%$search%";
 $nameParam = $search; // For exact or prefix match
 
-// Prioritize name matches first, then others
-$sql = "SELECT *,
-    CASE
-        WHEN name LIKE :name_prefix THEN 1
-        WHEN name LIKE :search THEN 2
-        ELSE 3
-    END as priority
-FROM historical_figures WHERE 
-    name LIKE :search OR 
-    field_of_influence LIKE :search OR 
-    primary_occupation LIKE :search OR 
-    country_of_origin LIKE :search OR 
-    major_achievements LIKE :search OR 
-    description LIKE :search
-ORDER BY priority, name ASC
-LIMIT 20";
+// First, try to find matches in the name field only
+$sql_name = "SELECT * FROM historical_figures WHERE name LIKE :search ORDER BY name ASC LIMIT 20";
+$stmt_name = $pdo->prepare($sql_name);
+$stmt_name->execute(['search' => $searchParam]);
+$name_results = $stmt_name->fetchAll();
 
-$stmt = $pdo->prepare($sql);
-$stmt->execute([
-    'search' => $searchParam,
-    'name_prefix' => "$nameParam%"
-]);
-$results = $stmt->fetchAll();
+if (count($name_results) > 0) {
+    $results = $name_results;
+} else {
+    // If no name matches, search other fields
+    $sql_other = "SELECT * FROM historical_figures WHERE 
+        field_of_influence LIKE :search OR 
+        primary_occupation LIKE :search OR 
+        country_of_origin LIKE :search OR 
+        major_achievements LIKE :search OR 
+        description LIKE :search
+        ORDER BY name ASC
+        LIMIT 20";
+    $stmt_other = $pdo->prepare($sql_other);
+    $stmt_other->execute(['search' => $searchParam]);
+    $results = $stmt_other->fetchAll();
+}
 
 header('Content-Type: application/json');
 echo json_encode([
